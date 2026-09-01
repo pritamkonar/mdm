@@ -32,18 +32,15 @@ def universal_phonetic_convert(item):
     item_str = str(item).strip().lower()
     if not item_str: return ""
     
-    # If it already contains Bengali characters, return as is
     if any('\u0980' <= c <= '\u09ff' for c in item_str):
         return str(item).strip()
         
-    # Check if words match our phonetic map (handles comma-separated items like "bhat, dal, dim")
     parts = [p.strip() for p in item_str.split(",")]
     converted_parts = []
     for p in parts:
         if p in PHONETIC_MAP:
             converted_parts.append(PHONETIC_MAP[p])
         else:
-            # Universal fallback capitalization/transliteration hint if unmatched
             converted_parts.append(p)
             
     return ", ".join(converted_parts)
@@ -68,7 +65,7 @@ with st.expander("Step 1: Paste CSV Data (Optional)", expanded=False):
         placeholder="Date,No of student availing MDM Class - V,No of student availing MDM Class - VI to VIII,Items served..."
     )
 
-    if st.button("Load Pasted Data"):
+    if st.button("Load Pasted Data", key="load_csv_btn"):
         if data_input:
             try:
                 new_df = pd.read_csv(StringIO(data_input.strip()))
@@ -98,7 +95,7 @@ with r_col3:
 with r_col4:
     grain_rate_vi = st.number_input("Class VI-VIII Grains (Kg/student)", value=0.150, step=0.005, format="%.3f")
 
-if st.button("🧮 Auto-Calculate Costs & Grains", help="Calculates Cooking Cost and Food Grains using the rates above"):
+if st.button("🧮 Auto-Calculate Costs & Grains", key="calc_btn", help="Calculates Cooking Cost and Food Grains using the rates above"):
     st.session_state.df["Cooking cost for Class - V to VIII"] = st.session_state.df["Cooking cost for Class - V to VIII"].astype(object)
     st.session_state.df["Food Grains for Class - V (Kg.)"] = st.session_state.df["Food Grains for Class - V (Kg.)"].astype(object)
     st.session_state.df["Food grains for Class - VI to VIII (Kg.)"] = st.session_state.df["Food grains for Class - VI to VIII (Kg.)"].astype(object)
@@ -119,11 +116,12 @@ if st.button("🧮 Auto-Calculate Costs & Grains", help="Calculates Cooking Cost
 
 st.caption("Type food items in English (e.g. 'mach', 'dim') in 'Items served' — it converts to Bengali as soon as you click out of the cell.")
 
-# Render data editor and instantly catch updates to apply phonetic conversion
+# Added a unique key="daily_data_editor" to eliminate StreamlitDuplicateElementId error
 edited_df = st.data_editor(
     st.session_state.df,
     num_rows="dynamic",
-    use_container_width=True
+    use_container_width=True,
+    key="daily_data_editor"
 )
 
 # Automatically map any newly typed English items to Bengali in session state
@@ -131,13 +129,6 @@ if not edited_df.equals(st.session_state.df):
     edited_df["Items served"] = edited_df["Items served"].apply(universal_phonetic_convert)
     st.session_state.df = edited_df
     st.rerun()
-st.caption("Type food items in English (e.g. 'bhat, dal, dim') in 'Items served' and it converts to Bengali.")
-
-edited_df = st.data_editor(
-    st.session_state.df,
-    num_rows="dynamic",
-    use_container_width=True
-)
 
 # 3. Financial Data Entry Boxes
 st.write("### Step 3: Financial Details (Opening Balances & Received Funds)")
@@ -321,7 +312,7 @@ def create_excel_template(c_v, c_vi):
 
 # 4. Generate Final Report
 st.markdown("---")
-if st.button("Download Final Excel Report", type="primary"):
+if st.button("Download Final Excel Report", key="download_excel_btn", type="primary"):
     try:
         wb, sheet = create_excel_template(cost_rate_v, cost_rate_vi)
         start_row = 13
@@ -399,7 +390,8 @@ if st.button("Download Final Excel Report", type="primary"):
             label="⬇️ Download Populated MDM Report",
             data=output,
             file_name="Completed_MDM_Report.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="download_btn_final"
         )
 
     except Exception as e:
