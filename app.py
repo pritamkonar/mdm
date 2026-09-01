@@ -9,16 +9,20 @@ st.title("MDM Monthly Report Generator")
 st.write("Paste your CSV data to load it, or type directly into the editable grid below. The app will generate the full Excel file from scratch.")
 
 # Define the dropdown options with English prefixes for easy typing
-FOOD_OPTIONS = [
-    "a - আলু",
-    "b - বেগুন বরবটি",
-    "d - ডিম",
-    "k - কুমড়ো",
-    "kp - কচু পুঁই",
-    "p - পটল",
-    "s - সয়াবিন",
-    "none - (শুধু ভাত ও ডাল)"
-]
+def to_dropdown_format(item):
+    if pd.isna(item): return None
+    item = str(item).strip()
+    if "কুমড়ো" in item: return "k - কুমড়ো"
+    if "কচু পুঁই" in item: return "kp - কচু পুঁই"
+    if "পটল" in item: return "p - পটল"
+    if "বেগুন বরবটি" in item: return "b - বেগুন বরবটি"
+    if "ডিম" in item: return "d - ডিম"
+    if "আলু" in item: return "a - আলু"
+    if "সয়াবিন" in item: return "s - সয়াবিন"
+    if item == "ভাত, ডাল": return "none - (শুধু ভাত ও ডাল)"
+    
+    # SAFEGUARD: Return None instead of the raw text so the dropdown doesn't crash
+    return None
 
 # Helper function to convert raw CSV strings to dropdown format
 def to_dropdown_format(item):
