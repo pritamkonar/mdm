@@ -95,6 +95,12 @@ with calc_col:
     st.write("") # Vertical spacing to align with input boxes
     st.write("") 
     if st.button("🧮 Auto-Calculate Costs & Grains", help="Calculates Cooking Cost and Food Grains based on student numbers"):
+        
+        # FIX: Unlock the column data types before injecting calculated decimals
+        st.session_state.df["Cooking cost for Class - V to VIII"] = st.session_state.df["Cooking cost for Class - V to VIII"].astype(object)
+        st.session_state.df["Food Grains for Class - V"] = st.session_state.df["Food Grains for Class - V"].astype(object)
+        st.session_state.df["Food grains for Class - VI to VIII"] = st.session_state.df["Food grains for Class - VI to VIII"].astype(object)
+
         for idx, row in st.session_state.df.iterrows():
             if pd.notna(row["No of student availing MDM Class - V"]):
                 try:
