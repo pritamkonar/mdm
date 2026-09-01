@@ -159,7 +159,7 @@ def create_excel_template():
         **{r: 14.5 for r in range(13, 39)}, # 26 days of standard row heights
         39: 16.0, 40: 20.0, 41: 26.0, 42: 16.0,
         43: 14.5, 44: 14.5, 45: 14.5, 46: 14.5, 47: 14.5, 48: 14.5,
-        49: 30.0, 50: 25.0, # Signature spacing
+        49: 65.0, 50: 30.0, # Increased signature spacing
     }
     for r, h in row_heights.items():
         ws.row_dimensions[r].height = h
