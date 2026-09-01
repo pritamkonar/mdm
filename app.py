@@ -254,11 +254,12 @@ def create_excel_template(c_v, c_vi):
         c = ws.cell(row=r, column=2, value=item)
         c.font = f_hdr9; c.alignment = a_left_wrap
 
+    # Updated headers with unit (Kg.) added to weight columns
     headers = [
         "Sl. No.", "Date", "No of student\navailing MDM\nClass -V",
         "No of student\navailing MDM\nClass VI to VIII", "Items served",
-        "Cooking cost\nfor Class - V to VIII", "Food Grains for\nClass - V",
-        "Food grains for\nClass VI to VIII"
+        "Cooking cost\nfor Class - V to VIII", "Food Grains for\nClass - V (Kg.)",
+        "Food grains for\nClass VI to VIII (Kg.)"
     ]
     for col_num, header in enumerate(headers, 1):
         cell = ws.cell(row=12, column=col_num, value=header)
@@ -278,7 +279,6 @@ def create_excel_template(c_v, c_vi):
         ws.cell(row=39, column=col).font = f_data_bold
         ws.cell(row=39, column=col).alignment = a_center_wrap
 
-    # ---- Dynamic Row 40 Formula Note ----
     formula_note = f"*(Total student of Class - V X {c_v}) + Total student of Class - VI to VIII X {c_vi})"
     c = ws.cell(row=40, column=1, value=formula_note)
     c.font = f_hdr8; c.alignment = a_left_wrap
@@ -318,7 +318,6 @@ def create_excel_template(c_v, c_vi):
 st.markdown("---")
 if st.button("Download Final Excel Report", type="primary"):
     try:
-        # Pass the configured cost rates into the template generator
         wb, sheet = create_excel_template(cost_rate_v, cost_rate_vi)
         start_row = 13
 
@@ -388,7 +387,7 @@ if st.button("Download Final Excel Report", type="primary"):
         wb.save(output)
         output.seek(0)
 
-        st.success("A4 Report generated successfully! Row 40 formula note has been updated with your rates.")
+        st.success("A4 Report generated successfully! Weight headers updated with (Kg.).")
 
         st.download_button(
             label="⬇️ Download Populated MDM Report",
