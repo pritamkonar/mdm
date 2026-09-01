@@ -20,34 +20,43 @@ def google_phonetic_convert(text):
     text_str = str(text).strip()
     if not text_str: return ""
     
-    # If it already contains Bengali characters, keep as is
-    if any('\u0980' <= c <= '\u09ff' for c in text_str):
-        return text_str
-
-    # Split by commas to handle multi-word inputs like "bhat, dal, mach"
-    parts = [p.strip() for p in text_str.split(",")]
-    converted_parts = []
+    # If it already contains Bengali characters and no un-transliterated English left, keep as is
+    # We will process each comma-separated or space-separated token individually
+    tokens = [t.strip() for t in text_str.replace(",", ", ").split()]
+    converted_tokens = []
     
-    for part in parts:
-        if not part:
+    for token in tokens:
+        if not token:
             continue
+            
+        # Keep punctuation or commas intact
+        is_comma = token.endswith(",")
+        clean_token = token.rstrip(",")
+        
+        # If the token is already Bengali, keep it
+        if any('\u0980' <= c <= '\u09ff' for c in clean_token):
+            converted_tokens.append(token)
+            continue
+            
         try:
-            # Call Google's free public transliteration API endpoint
-            url = f"https://inputtools.google.com/request?text={urllib.request.quote(part)}&itc=bn-t-i0-und&num=1"
+            # Call Google's free public transliteration API endpoint for each word
+            url = f"https://inputtools.google.com/request?text={urllib.request.quote(clean_token)}&itc=bn-t-i0-und&num=1"
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=2) as response:
                 res_data = json.loads(response.read().decode('utf-8'))
                 if res_data[0] == "SUCCESS":
-                    # Extract the top phonetic suggestion from Google
                     bengali_word = res_data[1][0][1][0]
-                    converted_parts.append(bengali_word)
+                    if is_comma:
+                        converted_tokens.append(bengali_word + ",")
+                    else:
+                        converted_tokens.append(bengali_word)
                 else:
-                    converted_parts.append(part)
+                    converted_tokens.append(token)
         except Exception:
-            # Fallback if offline or network timeout occurs
-            converted_parts.append(part)
+            # Fallback if offline
+            converted_tokens.append(token)
             
-    return ", ".join(converted_parts)
+    return " ".join(converted_tokens)
 
 # Initialize empty dataframe with exact column names matching headers
 if "df" not in st.session_state:
