@@ -117,6 +117,20 @@ if st.button("🧮 Auto-Calculate Costs & Grains", help="Calculates Cooking Cost
                 pass
     st.rerun()
 
+st.caption("Type food items in English (e.g. 'mach', 'dim') in 'Items served' — it converts to Bengali as soon as you click out of the cell.")
+
+# Render data editor and instantly catch updates to apply phonetic conversion
+edited_df = st.data_editor(
+    st.session_state.df,
+    num_rows="dynamic",
+    use_container_width=True
+)
+
+# Automatically map any newly typed English items to Bengali in session state
+if not edited_df.equals(st.session_state.df):
+    edited_df["Items served"] = edited_df["Items served"].apply(universal_phonetic_convert)
+    st.session_state.df = edited_df
+    st.rerun()
 st.caption("Type food items in English (e.g. 'bhat, dal, dim') in 'Items served' and it converts to Bengali.")
 
 edited_df = st.data_editor(
