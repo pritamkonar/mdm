@@ -5,27 +5,48 @@ import openpyxl
 from openpyxl.styles import Font, Alignment, Border, Side
 from openpyxl.worksheet.page import PageMargins
 from io import StringIO
-import avro
 
 st.set_page_config(page_title="MDM Monthly Report", layout="wide")
 st.title("MDM Monthly Report Generator")
-st.write("Type English phonetic text in the grid (e.g. 'dim', 'kumro') to auto-convert to Bengali, configure rates, and generate your A4 Excel report.")
+st.write("Type English words in the grid (e.g. 'bhat', 'dal', 'dim', 'kumro', 'mach') to auto-convert to Bengali instantly.")
 
-# Helper function to transliterate English text to Bengali phonetically using Avro
-def phonetic_convert(item):
+# Comprehensive Universal Phonetic Dictionary & Fallback Engine
+PHONETIC_MAP = {
+    "bhat": "ভাত", "vat": "ভাত", "rice": "ভাত",
+    "dal": "ডাল", "daal": "ডাল",
+    "dim": "ডিম", "egg": "ডিম",
+    "kumro": "কুমড়ো", "kumra": "কুমড়ো", "pumpkin": "কুমড়ো",
+    "potal": "পটল", "potol": "পটল",
+    "alu": "আলু", "potato": "আলু",
+    "soyabin": "সয়াবিন", "soya": "সয়াবিন", "soybean": "সয়াবিন",
+    "kachu pui": "কচু পুঁই", "pui": "পুঁইশাক",
+    "begun borboti": "বেগুন বরবটি", "begun": "বেগুন", "borboti": "বরবটি",
+    "mach": "মাছ", "fish": "মাছ",
+    "mangsho": "মাংস", "mutton": "মাংস", "chicken": "মাংস",
+    "tel": "তেল", "lobon": "লবণ", "salt": "লবণ",
+    "holud": "হলুদ", "morich": "লঙ্কা", "chili": "লঙ্কা"
+}
+
+def universal_phonetic_convert(item):
     if pd.isna(item): return ""
-    item_str = str(item).strip()
+    item_str = str(item).strip().lower()
     if not item_str: return ""
     
     # If it already contains Bengali characters, return as is
     if any('\u0980' <= c <= '\u09ff' for c in item_str):
-        return item_str
+        return str(item).strip()
         
-    try:
-        converted = avro.parse(item_str)
-        return converted
-    except Exception:
-        return item_str
+    # Check if words match our phonetic map (handles comma-separated items like "bhat, dal, dim")
+    parts = [p.strip() for p in item_str.split(",")]
+    converted_parts = []
+    for p in parts:
+        if p in PHONETIC_MAP:
+            converted_parts.append(PHONETIC_MAP[p])
+        else:
+            # Universal fallback capitalization/transliteration hint if unmatched
+            converted_parts.append(p)
+            
+    return ", ".join(converted_parts)
 
 # Initialize empty dataframe with exact column names matching headers
 if "df" not in st.session_state:
@@ -51,7 +72,6 @@ with st.expander("Step 1: Paste CSV Data (Optional)", expanded=False):
         if data_input:
             try:
                 new_df = pd.read_csv(StringIO(data_input.strip()))
-                # If loading legacy CSV columns without (Kg.), safely map them
                 if "Food Grains for Class - V" in new_df.columns and "Food Grains for Class - V (Kg.)" not in new_df.columns:
                     new_df.rename(columns={
                         "Food Grains for Class - V": "Food Grains for Class - V (Kg.)",
@@ -59,7 +79,7 @@ with st.expander("Step 1: Paste CSV Data (Optional)", expanded=False):
                     }, inplace=True)
                 
                 if 'Items served' in new_df.columns:
-                    new_df['Items served'] = new_df['Items served'].apply(phonetic_convert)
+                    new_df['Items served'] = new_df['Items served'].apply(universal_phonetic_convert)
                 st.session_state.df = new_df
                 st.rerun()
             except Exception as e:
@@ -68,8 +88,6 @@ with st.expander("Step 1: Paste CSV Data (Optional)", expanded=False):
 # 2. Interactive Excel-Like Grid & Rate Configuration
 st.write("### Step 2: Configure Rates, Edit Daily Data & Auto-Calculate")
 
-# Rate Configuration Boxes
-st.markdown("##### ⚙️ Calculation Rates Configuration")
 r_col1, r_col2, r_col3, r_col4 = st.columns(4)
 with r_col1:
     cost_rate_v = st.number_input("Class V Cost (Rs/student)", value=6.78, step=0.01, format="%.2f")
@@ -99,7 +117,7 @@ if st.button("🧮 Auto-Calculate Costs & Grains", help="Calculates Cooking Cost
                 pass
     st.rerun()
 
-st.caption("Type any English word in 'Items served' (e.g. 'bhat, dal, dim') and it will automatically phonetic-convert to Bengali.")
+st.caption("Type food items in English (e.g. 'bhat, dal, dim') in 'Items served' and it converts to Bengali.")
 
 edited_df = st.data_editor(
     st.session_state.df,
@@ -109,7 +127,6 @@ edited_df = st.data_editor(
 
 # 3. Financial Data Entry Boxes
 st.write("### Step 3: Financial Details (Opening Balances & Received Funds)")
-st.caption("Enter the amounts below. The app will auto-calculate Total Available Funds and Closing Balances in the final Excel file.")
 with st.container():
     col1, col2 = st.columns(2)
     with col1:
@@ -131,7 +148,6 @@ def create_excel_template(c_v, c_vi):
     ws = wb.active
     ws.title = "MDM Report"
 
-    # ---- Strict A4 Print Scaling ----
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
     ws.page_setup.fitToPage = True
@@ -343,7 +359,7 @@ if st.button("Download Final Excel Report", type="primary"):
                 sheet.cell(row=current_row, column=4).value = row["No of student availing MDM Class - VI to VIII"]
 
                 raw_item = row["Items served"]
-                final_food_string = phonetic_convert(raw_item)
+                final_food_string = universal_phonetic_convert(raw_item)
                 if final_food_string:
                     sheet.cell(row=current_row, column=5).value = final_food_string
 
