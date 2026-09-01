@@ -17,18 +17,17 @@ def phonetic_convert(item):
     item_str = str(item).strip()
     if not item_str: return ""
     
-    # If it already contains Bengali characters or is a preset dropdown code, return as is
+    # If it already contains Bengali characters, return as is
     if any('\u0980' <= c <= '\u09ff' for c in item_str):
         return item_str
         
-    # Parse English text into phonetic Bengali using avro.py
     try:
         converted = avro.parse(item_str)
         return converted
     except Exception:
         return item_str
 
-# Initialize empty dataframe in session state
+# Initialize empty dataframe with exact column names matching headers
 if "df" not in st.session_state:
     st.session_state.df = pd.DataFrame(columns=[
         "Date",
@@ -52,8 +51,14 @@ with st.expander("Step 1: Paste CSV Data (Optional)", expanded=False):
         if data_input:
             try:
                 new_df = pd.read_csv(StringIO(data_input.strip()))
+                # If loading legacy CSV columns without (Kg.), safely map them
+                if "Food Grains for Class - V" in new_df.columns and "Food Grains for Class - V (Kg.)" not in new_df.columns:
+                    new_df.rename(columns={
+                        "Food Grains for Class - V": "Food Grains for Class - V (Kg.)",
+                        "Food grains for Class - VI to VIII": "Food grains for Class - VI to VIII (Kg.)"
+                    }, inplace=True)
+                
                 if 'Items served' in new_df.columns:
-                    # Apply phonetic conversion to loaded CSV items
                     new_df['Items served'] = new_df['Items served'].apply(phonetic_convert)
                 st.session_state.df = new_df
                 st.rerun()
@@ -337,7 +342,6 @@ if st.button("Download Final Excel Report", type="primary"):
                 sheet.cell(row=current_row, column=3).value = row["No of student availing MDM Class - V"]
                 sheet.cell(row=current_row, column=4).value = row["No of student availing MDM Class - VI to VIII"]
 
-                # Automatically convert English text phonetically to Bengali for Excel output
                 raw_item = row["Items served"]
                 final_food_string = phonetic_convert(raw_item)
                 if final_food_string:
@@ -359,7 +363,7 @@ if st.button("Download Final Excel Report", type="primary"):
         wb.save(output)
         output.seek(0)
 
-        st.success("A4 Report generated successfully with phonetic Bengali conversion!")
+        st.success("A4 Report generated successfully!")
 
         st.download_button(
             label="⬇️ Download Populated MDM Report",
