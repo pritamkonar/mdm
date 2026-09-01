@@ -8,7 +8,7 @@ from io import StringIO
 
 st.set_page_config(page_title="MDM Monthly Report", layout="wide")
 st.title("MDM Monthly Report Generator")
-st.write("Paste your CSV data, auto-calculate daily costs, enter your opening balances, and generate an official A4-ready Excel file.")
+st.write("Paste your CSV data, adjust rates, auto-calculate daily metrics, enter your opening balances, and generate an official A4-ready Excel file.")
 
 # Define the dropdown options with English prefixes for easy typing
 FOOD_OPTIONS = [
@@ -81,40 +81,39 @@ with st.expander("Step 1: Paste CSV Data (Optional)", expanded=False):
             except Exception as e:
                 st.error(f"Error parsing data: {e}")
 
-# 2. Interactive Excel-Like Grid & Calculation
-st.write("### Step 2: Edit Daily Data & Auto-Calculate")
+# 2. Interactive Excel-Like Grid & Rate Configuration
+st.write("### Step 2: Configure Rates, Edit Daily Data & Auto-Calculate")
 
-# Food grain configuration
-g_col1, g_col2, calc_col = st.columns([1, 1, 2])
-with g_col1:
+# Rate Configuration Boxes
+st.markdown("##### ⚙️ Calculation Rates Configuration")
+r_col1, r_col2, r_col3, r_col4 = st.columns(4)
+with r_col1:
+    cost_rate_v = st.number_input("Class V Cost (Rs/student)", value=6.78, step=0.01, format="%.2f")
+with r_col2:
+    cost_rate_vi = st.number_input("Class VI-VIII Cost (Rs/student)", value=10.17, step=0.01, format="%.2f")
+with r_col3:
     grain_rate_v = st.number_input("Class V Grains (Kg/student)", value=0.100, step=0.005, format="%.3f")
-with g_col2:
+with r_col4:
     grain_rate_vi = st.number_input("Class VI-VIII Grains (Kg/student)", value=0.150, step=0.005, format="%.3f")
 
-with calc_col:
-    st.write("") # Vertical spacing to align with input boxes
-    st.write("") 
-    if st.button("🧮 Auto-Calculate Costs & Grains", help="Calculates Cooking Cost and Food Grains based on student numbers"):
-        
-        # FIX: Unlock the column data types before injecting calculated decimals
-        st.session_state.df["Cooking cost for Class - V to VIII"] = st.session_state.df["Cooking cost for Class - V to VIII"].astype(object)
-        st.session_state.df["Food Grains for Class - V"] = st.session_state.df["Food Grains for Class - V"].astype(object)
-        st.session_state.df["Food grains for Class - VI to VIII"] = st.session_state.df["Food grains for Class - VI to VIII"].astype(object)
+if st.button("🧮 Auto-Calculate Costs & Grains", help="Calculates Cooking Cost and Food Grains using the rates above"):
+    st.session_state.df["Cooking cost for Class - V to VIII"] = st.session_state.df["Cooking cost for Class - V to VIII"].astype(object)
+    st.session_state.df["Food Grains for Class - V"] = st.session_state.df["Food Grains for Class - V"].astype(object)
+    st.session_state.df["Food grains for Class - VI to VIII"] = st.session_state.df["Food grains for Class - VI to VIII"].astype(object)
 
-        for idx, row in st.session_state.df.iterrows():
-            if pd.notna(row["No of student availing MDM Class - V"]):
-                try:
-                    v_stu = float(row["No of student availing MDM Class - V"])
-                    vi_stu = float(row["No of student availing MDM Class - VI to VIII"])
-                    
-                    if "Days" not in str(row["Date"]) and "Total" not in str(row["Date"]):
-                        # Calculate costs based on WB Govt rates and dynamic grain rates
-                        st.session_state.df.at[idx, "Cooking cost for Class - V to VIII"] = round((v_stu * 6.78) + (vi_stu * 10.17), 2)
-                        st.session_state.df.at[idx, "Food Grains for Class - V"] = round(v_stu * grain_rate_v, 3)
-                        st.session_state.df.at[idx, "Food grains for Class - VI to VIII"] = round(vi_stu * grain_rate_vi, 3)
-                except ValueError:
-                    pass
-        st.rerun()
+    for idx, row in st.session_state.df.iterrows():
+        if pd.notna(row["No of student availing MDM Class - V"]):
+            try:
+                v_stu = float(row["No of student availing MDM Class - V"])
+                vi_stu = float(row["No of student availing MDM Class - VI to VIII"])
+                
+                if "Days" not in str(row["Date"]) and "Total" not in str(row["Date"]):
+                    st.session_state.df.at[idx, "Cooking cost for Class - V to VIII"] = round((v_stu * cost_rate_v) + (vi_stu * cost_rate_vi), 2)
+                    st.session_state.df.at[idx, "Food Grains for Class - V"] = round(v_stu * grain_rate_v, 3)
+                    st.session_state.df.at[idx, "Food grains for Class - VI to VIII"] = round(vi_stu * grain_rate_vi, 3)
+            except ValueError:
+                pass
+    st.rerun()
 
 st.caption("Edit cells directly. For 'Items served', type 'k' for কুমড়ো, 'd' for ডিম, etc.")
 
@@ -163,7 +162,6 @@ def create_excel_template():
     ws.page_setup.fitToHeight = 1
     ws.print_options.horizontalCentered = True
     
-    # Narrow margins to maximize the grid size on the page
     ws.page_margins = PageMargins(left=0.25, right=0.25, top=0.5, bottom=0.5, header=0.3, footer=0.3)
 
     # ---- Formatting Toolset ----
@@ -181,17 +179,14 @@ def create_excel_template():
     thin = Side(style="thin")
     full_border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
-    # Apply base borders to all standard cells in the printable area
     for row in ws.iter_rows(min_row=1, max_row=48, min_col=1, max_col=8):
         for cell in row:
             cell.border = full_border
 
-    # Row 49 (Spacer) & Row 50 (Signatures) Borders
     for col in range(1, 9):
         ws.cell(row=49, column=col).border = Border(top=thin, left=thin if col==1 else None, right=thin if col==8 else None)
         ws.cell(row=50, column=col).border = Border(bottom=thin, left=thin if col==1 else None, right=thin if col==8 else None)
 
-    # ---- Precise Column Widths & Row Heights ----
     ws.column_dimensions['A'].width = 5.0
     ws.column_dimensions['B'].width = 11.0
     ws.column_dimensions['C'].width = 11.5
@@ -213,7 +208,6 @@ def create_excel_template():
     for r, h in row_heights.items():
         ws.row_dimensions[r].height = h
 
-    # ---- Cell Merges ----
     merges = [
         "A1:H1", "A2:E2", "F2:G2", "A3:E3", "F3:G3",
         "B4:E4", "B5:E5", "B6:E6", "B7:E7", "B8:E8", "B9:E9", "B10:E10", "B11:E11",
@@ -224,7 +218,6 @@ def create_excel_template():
     for m in merges:
         ws.merge_cells(m)
 
-    # ---- Top Header ----
     c = ws.cell(row=1, column=1, value="MONTHLY REPORT FOR COOKING COST & FOOD GRAINS UNDER MID - DAY - MEAL FOR THE MONTH OF -")
     c.font = f_title; c.alignment = a_left_wrap
 
@@ -240,7 +233,6 @@ def create_excel_template():
     c = ws.cell(row=3, column=6, value="Class VI to VIII = 322")
     c.font = f_hdr9; c.alignment = a_center_wrap
 
-    # ---- Opening Balances ----
     header_row4 = {1: "Sl.", 2: "Particular", 6: "Class -V", 7: "VI to VIII", 8: "Total"}
     for col, val in header_row4.items():
         c = ws.cell(row=4, column=col, value=val)
@@ -262,7 +254,6 @@ def create_excel_template():
         c = ws.cell(row=r, column=2, value=item)
         c.font = f_hdr9; c.alignment = a_left_wrap
 
-    # ---- Daily Data Table Headers ----
     headers = [
         "Sl. No.", "Date", "No of student\navailing MDM\nClass -V",
         "No of student\navailing MDM\nClass VI to VIII", "Items served",
@@ -273,7 +264,6 @@ def create_excel_template():
         cell = ws.cell(row=12, column=col_num, value=header)
         cell.font = f_hdr8; cell.alignment = a_center_wrap
 
-    # ---- Blank Rows for 26 Days ----
     for i in range(26):
         r = 13 + i
         c = ws.cell(row=r, column=1, value=i + 1)
@@ -282,21 +272,18 @@ def create_excel_template():
             ws.cell(row=r, column=col).font = f_data_bold
             ws.cell(row=r, column=col).alignment = a_center_wrap
 
-    # ---- Base Total Row Style ----
     c = ws.cell(row=39, column=1, value="Total")
     c.font = f_hdr9; c.alignment = a_center_wrap
     for col in range(3, 9):
         ws.cell(row=39, column=col).font = f_data_bold
         ws.cell(row=39, column=col).alignment = a_center_wrap
 
-    # ---- Formula & Bank Text ----
     c = ws.cell(row=40, column=1, value="*(Total student of Class - V X 6.78) + Total student of Class - VI to VIII X 10.17)")
     c.font = f_hdr8; c.alignment = a_left_wrap
 
     c = ws.cell(row=41, column=1, value="Name of SHG (Cook-cum-Helper) MC - APPROVED_Name of Bank with Branch CANARA BANK, Mathrun Branch._ A/c no_3641101002012_worked during month.......")
     c.font = f_hdr8; c.alignment = a_left_wrap
 
-    # ---- Closing Balances ----
     header_row42 = {1: "Sl.", 2: "Particular", 6: "Class - V", 7: "VI to VIII", 8: "Total"}
     for col, val in header_row42.items():
         c = ws.cell(row=42, column=col, value=val)
@@ -317,7 +304,6 @@ def create_excel_template():
         c = ws.cell(row=r, column=2, value=item)
         c.font = f_hdr9; c.alignment = a_left_wrap
 
-    # ---- Signatures ----
     c = ws.cell(row=50, column=1, value="Signature of MDM Nodal Teacher")
     c.font = f_hdr9; c.alignment = a_center
     c = ws.cell(row=50, column=5, value="Signature of H M with seal")
@@ -333,20 +319,17 @@ if st.button("Download Final Excel Report", type="primary"):
         wb, sheet = create_excel_template()
         start_row = 13
 
-        # Inject Step 3 Financial Entries into Top Table (Column 8 = Total)
         sheet.cell(row=5, column=8).value = ob_cooking
         sheet.cell(row=6, column=8).value = ob_grains
         sheet.cell(row=7, column=8).value = fund_received
         sheet.cell(row=8, column=8).value = hon_received
         sheet.cell(row=9, column=8).value = grains_received
         
-        # Calculate Top Table Totals
         total_fund = ob_cooking + fund_received
         total_grains = ob_grains + grains_received
         sheet.cell(row=10, column=8).value = total_fund
         sheet.cell(row=11, column=8).value = total_grains
 
-        # Variables to track daily expenditures from the grid
         total_cooking_exp = 0.0
         total_grains_exp = 0.0
 
@@ -354,11 +337,9 @@ if st.button("Download Final Excel Report", type="primary"):
             if pd.isna(row["Date"]): 
                 continue
 
-            # Identify if it's the Summary Row
             is_summary = ("Days" in str(row["Date"]) or "Total" in str(row["Date"]))
 
             if is_summary:
-                # Force summary directly into standard Row 39
                 sheet.cell(row=39, column=1).value = str(row["Date"])
                 sheet.cell(row=39, column=3).value = row.get("No of student availing MDM Class - V", "")
                 sheet.cell(row=39, column=4).value = row.get("No of student availing MDM Class - VI to VIII", "")
@@ -366,7 +347,6 @@ if st.button("Download Final Excel Report", type="primary"):
                 sheet.cell(row=39, column=7).value = row.get("Food Grains for Class - V", "")
                 sheet.cell(row=39, column=8).value = row.get("Food grains for Class - VI to VIII", "")
                 
-                # Capture totals to calculate closing balances
                 try:
                     total_cooking_exp = float(row.get("Cooking cost for Class - V to VIII", 0))
                     g_v = float(row.get("Food Grains for Class - V", 0))
@@ -376,7 +356,6 @@ if st.button("Download Final Excel Report", type="primary"):
                     pass
 
             else:
-                # Standard daily data mapping
                 current_row = start_row + index
                 if current_row >= 39: 
                     break 
@@ -394,17 +373,14 @@ if st.button("Download Final Excel Report", type="primary"):
                 sheet.cell(row=current_row, column=7).value = row["Food Grains for Class - V"]
                 sheet.cell(row=current_row, column=8).value = row["Food grains for Class - VI to VIII"]
 
-        # Inject calculated values into Bottom Table (Closing Balances)
         sheet.cell(row=43, column=8).value = total_cooking_exp
         sheet.cell(row=44, column=8).value = total_grains_exp
         sheet.cell(row=45, column=8).value = hon_expenditure
         
-        # Calculate final closing balances based on template formulas
         sheet.cell(row=46, column=8).value = round(total_fund - total_cooking_exp, 2)
         sheet.cell(row=47, column=8).value = round(total_grains - total_grains_exp, 3)
         sheet.cell(row=48, column=8).value = round(hon_received - hon_expenditure, 2)
 
-        # Final Export
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
