@@ -149,7 +149,7 @@ with st.container():
 # ---------------------------------------------------------------------------
 # Excel Template Builder (Strict A4 Scale & PDF Accuracy)
 # ---------------------------------------------------------------------------
-def create_excel_template():
+def create_excel_template(c_v, c_vi):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "MDM Report"
@@ -278,7 +278,9 @@ def create_excel_template():
         ws.cell(row=39, column=col).font = f_data_bold
         ws.cell(row=39, column=col).alignment = a_center_wrap
 
-    c = ws.cell(row=40, column=1, value="*(Total student of Class - V X 6.78) + Total student of Class - VI to VIII X 10.17)")
+    # ---- Dynamic Row 40 Formula Note ----
+    formula_note = f"*(Total student of Class - V X {c_v}) + Total student of Class - VI to VIII X {c_vi})"
+    c = ws.cell(row=40, column=1, value=formula_note)
     c.font = f_hdr8; c.alignment = a_left_wrap
 
     c = ws.cell(row=41, column=1, value="Name of SHG (Cook-cum-Helper) MC - APPROVED_Name of Bank with Branch CANARA BANK, Mathrun Branch._ A/c no_3641101002012_worked during month.......")
@@ -316,7 +318,8 @@ def create_excel_template():
 st.markdown("---")
 if st.button("Download Final Excel Report", type="primary"):
     try:
-        wb, sheet = create_excel_template()
+        # Pass the configured cost rates into the template generator
+        wb, sheet = create_excel_template(cost_rate_v, cost_rate_vi)
         start_row = 13
 
         sheet.cell(row=5, column=8).value = ob_cooking
@@ -385,7 +388,7 @@ if st.button("Download Final Excel Report", type="primary"):
         wb.save(output)
         output.seek(0)
 
-        st.success("A4 Report generated successfully! All Closing Balances have been calculated.")
+        st.success("A4 Report generated successfully! Row 40 formula note has been updated with your rates.")
 
         st.download_button(
             label="⬇️ Download Populated MDM Report",
