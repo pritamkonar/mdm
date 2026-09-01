@@ -3,6 +3,7 @@ import pandas as pd
 import io
 import openpyxl
 from openpyxl.styles import Font, Alignment, Border, Side
+from openpyxl.worksheet.page import PageMargins
 from io import StringIO
 
 st.title("MDM Monthly Report Generator")
@@ -32,7 +33,7 @@ def to_dropdown_format(item):
     if "আলু" in item: return "a - আলু"
     if "সয়াবিন" in item: return "s - সয়াবিন"
     if item == "ভাত, ডাল": return "none - (শুধু ভাত ও ডাল)"
-    return item
+    return None # Safeguard to prevent crashing
 
 # Helper function to convert dropdown format back to official MDM format
 def to_excel_format(item):
@@ -91,19 +92,29 @@ edited_df = st.data_editor(
         "Items served": st.column_config.SelectboxColumn(
             "Items served (Side Dish)",
             options=FOOD_OPTIONS,
-            required=False # Changed to False to allow empty values for the summary row
+            required=False # Allow empty values for the summary row
         )
     }
 )
 
 # ---------------------------------------------------------------------------
 # Function to build the Excel structure as an EXACT clone of the original
-# MDM_MONTHLY_REPORT.xlsx template
+# MDM MONTHLY REPORT_4.xlsx template and force it to fit A4 page.
 # ---------------------------------------------------------------------------
 def create_excel_template():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "MDM Report"
+
+    # ---- Print / Page Setup for A4 Single Page ----
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
+    ws.page_setup.fitToPage = True
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 1
+    
+    # Set narrow margins to maximize printable area
+    ws.page_margins = PageMargins(left=0.25, right=0.25, top=0.5, bottom=0.5, header=0.3, footer=0.3)
 
     # ---- Fonts ----
     f_title = Font(name="Arial", size=9, bold=True)        
