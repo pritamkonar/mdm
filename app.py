@@ -5,45 +5,57 @@ import openpyxl
 from openpyxl.styles import Font, Alignment, Border, Side
 from openpyxl.worksheet.page import PageMargins
 from io import StringIO
+import re
 
 st.set_page_config(page_title="MDM Monthly Report", layout="wide")
 st.title("MDM Monthly Report Generator")
-st.write("Type English words in the grid (e.g. 'bhat', 'dal', 'dim', 'kumro', 'mach') to auto-convert to Bengali instantly.")
+st.write("Type any English word in the grid (e.g., 'mach', 'dim', 'mangsho', or any custom word) — it converts to Bengali phonetically on the fly.")
 
-# Comprehensive Universal Phonetic Dictionary & Fallback Engine
-PHONETIC_MAP = {
-    "bhat": "ভাত", "vat": "ভাত", "rice": "ভাত",
-    "dal": "ডাল", "daal": "ডাল",
-    "dim": "ডিম", "egg": "ডিম",
-    "kumro": "কুমড়ো", "kumra": "কুমড়ো", "pumpkin": "কুমড়ো",
-    "potal": "পটল", "potol": "পটল",
-    "alu": "আলু", "potato": "আলু",
-    "soyabin": "সয়াবিন", "soya": "সয়াবিন", "soybean": "সয়াবিন",
-    "kachu pui": "কচু পুঁই", "pui": "পুঁইশাক",
-    "begun borboti": "বেগুন বরবটি", "begun": "বেগুন", "borboti": "বরবটি",
-    "mach": "মাছ", "fish": "মাছ",
-    "mangsho": "মাংস", "mutton": "মাংস", "chicken": "মাংস",
-    "tel": "তেল", "lobon": "লবণ", "salt": "লবণ",
-    "holud": "হলুদ", "morich": "লঙ্কা", "chili": "লঙ্কা"
-}
-
-def universal_phonetic_convert(item):
-    if pd.isna(item): return ""
-    item_str = str(item).strip().lower()
-    if not item_str: return ""
+# ---------------------------------------------------------------------------
+# Universal Phonetic Engine (Converts ANY English word to Bengali phonetics)
+# ---------------------------------------------------------------------------
+def universal_phonetic_convert(text):
+    if pd.isna(text): return ""
+    text_str = str(text).strip().lower()
+    if not text_str: return ""
     
-    if any('\u0980' <= c <= '\u09ff' for c in item_str):
-        return str(item).strip()
+    # If it already contains Bengali characters, keep as is
+    if any('\u0980' <= c <= '\u09ff' for c in text_str):
+        return str(text).strip()
+
+    # Consonant & Vowel Phonetic Mapping Rules
+    mapping = [
+        ("shh", "শ্"), ("sh", "শ"), ("ch", "চ"), ("th", "থ"), ("dh", "ধ"),
+        ("ph", "ফ"), ("bh", "ভ"), ("kh", "খ"), ("gh", "ঘ"), ("jh", "ঝ"),
+        ("ng", "ঙ"), ("gy", "জ্ঞ"), ("ksh", "ক্ষ"),
         
-    parts = [p.strip() for p in item_str.split(",")]
-    converted_parts = []
-    for p in parts:
-        if p in PHONETIC_MAP:
-            converted_parts.append(PHONETIC_MAP[p])
-        else:
-            converted_parts.append(p)
+        ("k", "ক"), ("g", "গ"), ("c", "ক"), ("j", "জ"), ("z", "জ"),
+        ("t", "ট"), ("d", "ড"), ("n", "ন"), ("p", "প"), ("f", "ফ"),
+        ("b", "ব"), ("v", "ভ"), ("m", "ম"), ("y", "য়"), ("r", "র"),
+        ("l", "ল"), ("s", "স"), ("h", "হ"), ("w", "ও"), ("q", "ক"),
+        ("x", "ক্স"), ("j", "জ"), ("d", "দ"),
+        
+        # Vowels (Standalone or independent)
+        ("aa", "আ"), ("ee", "ঈ"), ("oo", "ঊ"), ("ai", "আই"), ("oi", "ঐ"), ("au", "ঔ"),
+        ("a", "আ"), ("i", "ই"), ("u", "উ"), ("e", "এ"), ("o", "ও")
+    ]
+
+    # Process word by word or split by commas (for multi-item entries like "bhat, dal, mach")
+    words = text_str.split(",")
+    converted_words = []
+    
+    for word in words:
+        w = word.strip()
+        if not w:
+            continue
             
-    return ", ".join(converted_parts)
+        # Apply phonetic rules sequentially
+        for pattern, replacement in mapping:
+            w = w.replace(pattern, replacement)
+            
+        converted_words.append(w)
+        
+    return ", ".join(converted_words)
 
 # Initialize empty dataframe with exact column names matching headers
 if "df" not in st.session_state:
@@ -114,9 +126,8 @@ if st.button("🧮 Auto-Calculate Costs & Grains", key="calc_btn", help="Calcula
                 pass
     st.rerun()
 
-st.caption("Type food items in English (e.g. 'mach', 'dim') in 'Items served' — it converts to Bengali as soon as you click out of the cell.")
+st.caption("Type any English word in 'Items served' (e.g. 'mach', 'dim', 'mangsho') — it will dynamically translate to Bengali phonetically.")
 
-# Added a unique key="daily_data_editor" to eliminate StreamlitDuplicateElementId error
 edited_df = st.data_editor(
     st.session_state.df,
     num_rows="dynamic",
@@ -124,7 +135,7 @@ edited_df = st.data_editor(
     key="daily_data_editor"
 )
 
-# Automatically map any newly typed English items to Bengali in session state
+# Intercept updates and run universal phonetic converter dynamically
 if not edited_df.equals(st.session_state.df):
     edited_df["Items served"] = edited_df["Items served"].apply(universal_phonetic_convert)
     st.session_state.df = edited_df
