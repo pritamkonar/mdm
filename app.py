@@ -22,6 +22,7 @@ FOOD_OPTIONS = [
 
 # Helper function to convert raw CSV strings to dropdown format
 def to_dropdown_format(item):
+    if pd.isna(item): return None
     item = str(item).strip()
     if "কুমড়ো" in item: return "k - কুমড়ো"
     if "কচু পুঁই" in item: return "kp - কচু পুঁই"
@@ -35,6 +36,7 @@ def to_dropdown_format(item):
 
 # Helper function to convert dropdown format back to official MDM format
 def to_excel_format(item):
+    if pd.isna(item): return ""
     item = str(item).strip()
     if item == "a - আলু": return "ভাত, ডাল, আলু"
     if item == "b - বেগুন বরবটি": return "ভাত, ডাল, বেগুন বরবটি"
@@ -44,7 +46,7 @@ def to_excel_format(item):
     if item == "p - পটল": return "ভাত, ডাল, পটল"
     if item == "s - সয়াবিন": return "ভাত, ডাল, সয়াবিন"
     if item == "none - (শুধু ভাত ও ডাল)": return "ভাত, ডাল"
-    return item
+    return item if item != "nan" else ""
 
 # Initialize empty dataframe in session state
 if "df" not in st.session_state:
@@ -89,15 +91,14 @@ edited_df = st.data_editor(
         "Items served": st.column_config.SelectboxColumn(
             "Items served (Side Dish)",
             options=FOOD_OPTIONS,
-            required=True
+            required=False # Changed to False to allow empty values for the summary row
         )
     }
 )
 
 # ---------------------------------------------------------------------------
 # Function to build the Excel structure as an EXACT clone of the original
-# MDM_MONTHLY_REPORT.xlsx template (same merges, fonts, borders, row/column
-# sizing and fixed label text).
+# MDM_MONTHLY_REPORT.xlsx template
 # ---------------------------------------------------------------------------
 def create_excel_template():
     wb = openpyxl.Workbook()
@@ -105,12 +106,12 @@ def create_excel_template():
     ws.title = "MDM Report"
 
     # ---- Fonts ----
-    f_title = Font(name="Arial", size=9, bold=True)        # row1-3 fixed text
-    f_enroll = Font(name="Arial", size=7, bold=True)        # F2:G2 small text
-    f_hdr9 = Font(name="Arial", size=9, bold=True)          # table header cells (row4, row12-ish, row42)
-    f_hdr8 = Font(name="Arial", size=8, bold=True)          # row12 daily header + row40/41 note text
-    f_data_bold = Font(name="Calibri", size=11, bold=True)  # blank data cells (rows5-11,13-39,43-48)
-    f_data_plain = Font(name="Calibri", size=11, bold=False)  # spacer rows 49/50 body
+    f_title = Font(name="Arial", size=9, bold=True)        
+    f_enroll = Font(name="Arial", size=7, bold=True)        
+    f_hdr9 = Font(name="Arial", size=9, bold=True)          
+    f_hdr8 = Font(name="Arial", size=8, bold=True)          
+    f_data_bold = Font(name="Calibri", size=11, bold=True)  
+    f_data_plain = Font(name="Calibri", size=11, bold=False)  
 
     # ---- Alignments ----
     a_left_wrap = Alignment(horizontal="left", vertical="center", wrap_text=True)
@@ -210,7 +211,7 @@ def create_excel_template():
     c = ws.cell(row=3, column=1, value="Gram Sansad No. - Bhallagram , Circle : Monglkote-II, Block : Mongalkote")
     c.font = f_title
     c.alignment = a_left_wrap
-    c = ws.cell(row=3, column=6, value="ass Class VI to VIII = 322")
+    c = ws.cell(row=3, column=6, value="Class VI to VIII = 322")
     c.font = f_hdr9
     c.alignment = a_center_wrap
     ws.cell(row=3, column=8).font = f_title
@@ -311,8 +312,6 @@ def create_excel_template():
         for col in (6, 7, 8):
             ws.cell(row=r, column=col).font = f_data_bold
 
-    # ---- Row 49: blank divider (already styled above) ----
-
     # ---- Row 50: signature line ----
     c = ws.cell(row=50, column=1, value="Signature of MDM Nodal Teacher")
     c.font = f_hdr9
@@ -327,36 +326,45 @@ def create_excel_template():
 # 3. Generate Final Report
 if st.button("Generate Final Excel Report", type="primary"):
     try:
-        # Build the fresh workbook (exact clone of the original template)
         wb, sheet = create_excel_template()
-
-        # The daily data starts at Excel row 13
         start_row = 13
 
-        # Fill user data into the Excel sheet
         for index, row in edited_df.iterrows():
-            current_row = start_row + index
+            # Check if this is the summary/total row (e.g. "22 Days" or "Total")
+            is_summary = pd.notna(row["Date"]) and ("Days" in str(row["Date"]) or "Total" in str(row["Date"]))
 
-            # Handle empty rows
-            if pd.isna(row["Date"]) and pd.isna(row["No of student availing MDM Class - V"]):
-                continue
+            if is_summary:
+                # Force the summary row exactly to Row 39 
+                # Write specifically to Column 1 to avoid crashing on the A39:B39 merged cell
+                sheet.cell(row=39, column=1).value = row["Date"]
+                
+                sheet.cell(row=39, column=3).value = row["No of student availing MDM Class - V"]
+                sheet.cell(row=39, column=4).value = row["No of student availing MDM Class - VI to VIII"]
+                sheet.cell(row=39, column=6).value = row["Cooking cost for Class - V to VIII"]
+                sheet.cell(row=39, column=7).value = row["Food Grains for Class - V"]
+                sheet.cell(row=39, column=8).value = row["Food grains for Class - VI to VIII"]
+            else:
+                current_row = start_row + index
+                
+                # Prevent overflow if the user adds too many days
+                if current_row >= 39: 
+                    break
 
-            # Column A (1): Serial Number (exclude for the final summary row)
-            if "Days" not in str(row["Date"]):
+                if pd.isna(row["Date"]) and pd.isna(row["No of student availing MDM Class - V"]):
+                    continue
+
                 sheet.cell(row=current_row, column=1).value = index + 1
+                sheet.cell(row=current_row, column=2).value = row["Date"]
+                sheet.cell(row=current_row, column=3).value = row["No of student availing MDM Class - V"]
+                sheet.cell(row=current_row, column=4).value = row["No of student availing MDM Class - VI to VIII"]
 
-            # Populate Columns B (2) through H (8)
-            sheet.cell(row=current_row, column=2).value = row["Date"]
-            sheet.cell(row=current_row, column=3).value = row["No of student availing MDM Class - V"]
-            sheet.cell(row=current_row, column=4).value = row["No of student availing MDM Class - VI to VIII"]
+                final_food_string = to_excel_format(row["Items served"])
+                if final_food_string:
+                    sheet.cell(row=current_row, column=5).value = final_food_string
 
-            # Convert UI dropdown value back to full Bengali string
-            final_food_string = to_excel_format(row["Items served"])
-            sheet.cell(row=current_row, column=5).value = final_food_string
-
-            sheet.cell(row=current_row, column=6).value = row["Cooking cost for Class - V to VIII"]
-            sheet.cell(row=current_row, column=7).value = row["Food Grains for Class - V"]
-            sheet.cell(row=current_row, column=8).value = row["Food grains for Class - VI to VIII"]
+                sheet.cell(row=current_row, column=6).value = row["Cooking cost for Class - V to VIII"]
+                sheet.cell(row=current_row, column=7).value = row["Food Grains for Class - V"]
+                sheet.cell(row=current_row, column=8).value = row["Food grains for Class - VI to VIII"]
 
         # Save to memory for download
         output = io.BytesIO()
@@ -365,7 +373,6 @@ if st.button("Generate Final Excel Report", type="primary"):
 
         st.success("Report generated successfully!")
 
-        # Provide Download Button
         st.download_button(
             label="Download Populated MDM Report",
             data=output,
