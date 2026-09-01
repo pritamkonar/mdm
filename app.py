@@ -5,57 +5,49 @@ import openpyxl
 from openpyxl.styles import Font, Alignment, Border, Side
 from openpyxl.worksheet.page import PageMargins
 from io import StringIO
-import re
+import urllib.request
+import json
 
 st.set_page_config(page_title="MDM Monthly Report", layout="wide")
 st.title("MDM Monthly Report Generator")
-st.write("Type any English word in the grid (e.g., 'mach', 'dim', 'mangsho', or any custom word) — it converts to Bengali phonetically on the fly.")
+st.write("Type any English word in the grid (e.g., 'mach', 'dim', 'mangsho') — it converts to accurate Bengali using Google's phonetic transliteration engine.")
 
 # ---------------------------------------------------------------------------
-# Universal Phonetic Engine (Converts ANY English word to Bengali phonetics)
+# Google Input Tools Transliteration API Integration (Same as EasyBengaliTyping)
 # ---------------------------------------------------------------------------
-def universal_phonetic_convert(text):
+def google_phonetic_convert(text):
     if pd.isna(text): return ""
-    text_str = str(text).strip().lower()
+    text_str = str(text).strip()
     if not text_str: return ""
     
     # If it already contains Bengali characters, keep as is
     if any('\u0980' <= c <= '\u09ff' for c in text_str):
-        return str(text).strip()
+        return text_str
 
-    # Consonant & Vowel Phonetic Mapping Rules
-    mapping = [
-        ("shh", "শ্"), ("sh", "শ"), ("ch", "চ"), ("th", "থ"), ("dh", "ধ"),
-        ("ph", "ফ"), ("bh", "ভ"), ("kh", "খ"), ("gh", "ঘ"), ("jh", "ঝ"),
-        ("ng", "ঙ"), ("gy", "জ্ঞ"), ("ksh", "ক্ষ"),
-        
-        ("k", "ক"), ("g", "গ"), ("c", "ক"), ("j", "জ"), ("z", "জ"),
-        ("t", "ট"), ("d", "ড"), ("n", "ন"), ("p", "প"), ("f", "ফ"),
-        ("b", "ব"), ("v", "ভ"), ("m", "ম"), ("y", "য়"), ("r", "র"),
-        ("l", "ল"), ("s", "স"), ("h", "হ"), ("w", "ও"), ("q", "ক"),
-        ("x", "ক্স"), ("j", "জ"), ("d", "দ"),
-        
-        # Vowels (Standalone or independent)
-        ("aa", "আ"), ("ee", "ঈ"), ("oo", "ঊ"), ("ai", "আই"), ("oi", "ঐ"), ("au", "ঔ"),
-        ("a", "আ"), ("i", "ই"), ("u", "উ"), ("e", "এ"), ("o", "ও")
-    ]
-
-    # Process word by word or split by commas (for multi-item entries like "bhat, dal, mach")
-    words = text_str.split(",")
-    converted_words = []
+    # Split by commas to handle multi-word inputs like "bhat, dal, mach"
+    parts = [p.strip() for p in text_str.split(",")]
+    converted_parts = []
     
-    for word in words:
-        w = word.strip()
-        if not w:
+    for part in parts:
+        if not part:
             continue
+        try:
+            # Call Google's free public transliteration API endpoint
+            url = f"https://inputtools.google.com/request?text={urllib.request.quote(part)}&itc=bn-t-i0-und&num=1"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=2) as response:
+                res_data = json.loads(response.read().decode('utf-8'))
+                if res_data[0] == "SUCCESS":
+                    # Extract the top phonetic suggestion from Google
+                    bengali_word = res_data[1][0][1][0]
+                    converted_parts.append(bengali_word)
+                else:
+                    converted_parts.append(part)
+        except Exception:
+            # Fallback if offline or network timeout occurs
+            converted_parts.append(part)
             
-        # Apply phonetic rules sequentially
-        for pattern, replacement in mapping:
-            w = w.replace(pattern, replacement)
-            
-        converted_words.append(w)
-        
-    return ", ".join(converted_words)
+    return ", ".join(converted_parts)
 
 # Initialize empty dataframe with exact column names matching headers
 if "df" not in st.session_state:
@@ -88,7 +80,7 @@ with st.expander("Step 1: Paste CSV Data (Optional)", expanded=False):
                     }, inplace=True)
                 
                 if 'Items served' in new_df.columns:
-                    new_df['Items served'] = new_df['Items served'].apply(universal_phonetic_convert)
+                    new_df['Items served'] = new_df['Items served'].apply(google_phonetic_convert)
                 st.session_state.df = new_df
                 st.rerun()
             except Exception as e:
@@ -126,7 +118,7 @@ if st.button("🧮 Auto-Calculate Costs & Grains", key="calc_btn", help="Calcula
                 pass
     st.rerun()
 
-st.caption("Type any English word in 'Items served' (e.g. 'mach', 'dim', 'mangsho') — it will dynamically translate to Bengali phonetically.")
+st.caption("Type any English word in 'Items served' (e.g. 'dim', 'mach', 'mangsho') — it will dynamically translate to Bengali via Google Transliteration.")
 
 edited_df = st.data_editor(
     st.session_state.df,
@@ -135,9 +127,9 @@ edited_df = st.data_editor(
     key="daily_data_editor"
 )
 
-# Intercept updates and run universal phonetic converter dynamically
+# Intercept updates and run Google phonetic converter dynamically
 if not edited_df.equals(st.session_state.df):
-    edited_df["Items served"] = edited_df["Items served"].apply(universal_phonetic_convert)
+    edited_df["Items served"] = edited_df["Items served"].apply(google_phonetic_convert)
     st.session_state.df = edited_df
     st.rerun()
 
@@ -375,7 +367,7 @@ if st.button("Download Final Excel Report", key="download_excel_btn", type="prim
                 sheet.cell(row=current_row, column=4).value = row["No of student availing MDM Class - VI to VIII"]
 
                 raw_item = row["Items served"]
-                final_food_string = universal_phonetic_convert(raw_item)
+                final_food_string = google_phonetic_convert(raw_item)
                 if final_food_string:
                     sheet.cell(row=current_row, column=5).value = final_food_string
 
@@ -395,7 +387,7 @@ if st.button("Download Final Excel Report", key="download_excel_btn", type="prim
         wb.save(output)
         output.seek(0)
 
-        st.success("A4 Report generated successfully!")
+        st.success("A4 Report generated successfully with Google Transliteration!")
 
         st.download_button(
             label="⬇️ Download Populated MDM Report",
