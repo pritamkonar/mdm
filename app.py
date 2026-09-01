@@ -5,50 +5,28 @@ import openpyxl
 from openpyxl.styles import Font, Alignment, Border, Side
 from openpyxl.worksheet.page import PageMargins
 from io import StringIO
+import avro
 
 st.set_page_config(page_title="MDM Monthly Report", layout="wide")
 st.title("MDM Monthly Report Generator")
-st.write("Paste your CSV data, adjust rates, auto-calculate daily metrics, enter your opening balances, and generate an official A4-ready Excel file.")
+st.write("Type English phonetic text in the grid (e.g. 'dim', 'kumro') to auto-convert to Bengali, configure rates, and generate your A4 Excel report.")
 
-# Define the dropdown options with English prefixes for easy typing
-FOOD_OPTIONS = [
-    "a - আলু",
-    "b - বেগুন বরবটি",
-    "d - ডিম",
-    "k - কুমড়ো",
-    "kp - কচু পুঁই",
-    "p - পটল",
-    "s - সয়াবিন",
-    "none - (শুধু ভাত ও ডাল)"
-]
-
-# Helper function to convert raw CSV strings to dropdown format
-def to_dropdown_format(item):
-    if pd.isna(item): return None
-    item = str(item).strip()
-    if "কুমড়ো" in item: return "k - কুমড়ো"
-    if "কচু পুঁই" in item: return "kp - কচু পুঁই"
-    if "পটল" in item: return "p - পটল"
-    if "বেগুন বরবটি" in item: return "b - বেগুন বরবটি"
-    if "ডিম" in item: return "d - ডিম"
-    if "আলু" in item: return "a - আলু"
-    if "সয়াবিন" in item: return "s - সয়াবিন"
-    if item == "ভাত, ডাল": return "none - (শুধু ভাত ও ডাল)"
-    return None 
-
-# Helper function to convert dropdown format back to official MDM format
-def to_excel_format(item):
+# Helper function to transliterate English text to Bengali phonetically using Avro
+def phonetic_convert(item):
     if pd.isna(item): return ""
-    item = str(item).strip()
-    if item == "a - আলু": return "ভাত, ডাল, আলু"
-    if item == "b - বেগুন বরবটি": return "ভাত, ডাল, বেগুন বরবটি"
-    if item == "d - ডিম": return "ভাত, ডাল, ডিম"
-    if item == "k - কুমড়ো": return "ভাত, ডাল, কুমড়ো"
-    if item == "kp - কচু পুঁই": return "ভাত, ডাল, কচু পুঁই"
-    if item == "p - পটল": return "ভাত, ডাল, পটল"
-    if item == "s - সয়াবিন": return "ভাত, ডাল, সয়াবিন"
-    if item == "none - (শুধু ভাত ও ডাল)": return "ভাত, ডাল"
-    return item if item != "nan" else ""
+    item_str = str(item).strip()
+    if not item_str: return ""
+    
+    # If it already contains Bengali characters or is a preset dropdown code, return as is
+    if any('\u0980' <= c <= '\u09ff' for c in item_str):
+        return item_str
+        
+    # Parse English text into phonetic Bengali using avro.py
+    try:
+        converted = avro.parse(item_str)
+        return converted
+    except Exception:
+        return item_str
 
 # Initialize empty dataframe in session state
 if "df" not in st.session_state:
@@ -58,8 +36,8 @@ if "df" not in st.session_state:
         "No of student availing MDM Class - VI to VIII",
         "Items served",
         "Cooking cost for Class - V to VIII",
-        "Food Grains for Class - V",
-        "Food grains for Class - VI to VIII"
+        "Food Grains for Class - V (Kg.)",
+        "Food grains for Class - VI to VIII (Kg.)"
     ])
 
 # 1. Optional CSV Data Loader
@@ -75,7 +53,8 @@ with st.expander("Step 1: Paste CSV Data (Optional)", expanded=False):
             try:
                 new_df = pd.read_csv(StringIO(data_input.strip()))
                 if 'Items served' in new_df.columns:
-                    new_df['Items served'] = new_df['Items served'].apply(to_dropdown_format)
+                    # Apply phonetic conversion to loaded CSV items
+                    new_df['Items served'] = new_df['Items served'].apply(phonetic_convert)
                 st.session_state.df = new_df
                 st.rerun()
             except Exception as e:
@@ -98,8 +77,8 @@ with r_col4:
 
 if st.button("🧮 Auto-Calculate Costs & Grains", help="Calculates Cooking Cost and Food Grains using the rates above"):
     st.session_state.df["Cooking cost for Class - V to VIII"] = st.session_state.df["Cooking cost for Class - V to VIII"].astype(object)
-    st.session_state.df["Food Grains for Class - V"] = st.session_state.df["Food Grains for Class - V"].astype(object)
-    st.session_state.df["Food grains for Class - VI to VIII"] = st.session_state.df["Food grains for Class - VI to VIII"].astype(object)
+    st.session_state.df["Food Grains for Class - V (Kg.)"] = st.session_state.df["Food Grains for Class - V (Kg.)"].astype(object)
+    st.session_state.df["Food grains for Class - VI to VIII (Kg.)"] = st.session_state.df["Food grains for Class - VI to VIII (Kg.)"].astype(object)
 
     for idx, row in st.session_state.df.iterrows():
         if pd.notna(row["No of student availing MDM Class - V"]):
@@ -109,25 +88,18 @@ if st.button("🧮 Auto-Calculate Costs & Grains", help="Calculates Cooking Cost
                 
                 if "Days" not in str(row["Date"]) and "Total" not in str(row["Date"]):
                     st.session_state.df.at[idx, "Cooking cost for Class - V to VIII"] = round((v_stu * cost_rate_v) + (vi_stu * cost_rate_vi), 2)
-                    st.session_state.df.at[idx, "Food Grains for Class - V"] = round(v_stu * grain_rate_v, 3)
-                    st.session_state.df.at[idx, "Food grains for Class - VI to VIII"] = round(vi_stu * grain_rate_vi, 3)
+                    st.session_state.df.at[idx, "Food Grains for Class - V (Kg.)"] = round(v_stu * grain_rate_v, 3)
+                    st.session_state.df.at[idx, "Food grains for Class - VI to VIII (Kg.)"] = round(vi_stu * grain_rate_vi, 3)
             except ValueError:
                 pass
     st.rerun()
 
-st.caption("Edit cells directly. For 'Items served', type 'k' for কুমড়ো, 'd' for ডিম, etc.")
+st.caption("Type any English word in 'Items served' (e.g. 'bhat, dal, dim') and it will automatically phonetic-convert to Bengali.")
 
 edited_df = st.data_editor(
     st.session_state.df,
     num_rows="dynamic",
-    use_container_width=True,
-    column_config={
-        "Items served": st.column_config.SelectboxColumn(
-            "Items served (Side Dish)",
-            options=FOOD_OPTIONS,
-            required=False 
-        )
-    }
+    use_container_width=True
 )
 
 # 3. Financial Data Entry Boxes
@@ -164,7 +136,6 @@ def create_excel_template(c_v, c_vi):
     
     ws.page_margins = PageMargins(left=0.25, right=0.25, top=0.5, bottom=0.5, header=0.3, footer=0.3)
 
-    # ---- Formatting Toolset ----
     f_title = Font(name="Arial", size=9, bold=True)        
     f_enroll = Font(name="Arial", size=8, bold=True)        
     f_hdr9 = Font(name="Arial", size=9, bold=True)          
@@ -257,8 +228,8 @@ def create_excel_template(c_v, c_vi):
     headers = [
         "Sl. No.", "Date", "No of student\navailing MDM\nClass -V",
         "No of student\navailing MDM\nClass VI to VIII", "Items served",
-        "Cooking cost\nfor Class - V to VIII", "Food Grains for\nClass - V",
-        "Food grains for\nClass VI to VIII"
+        "Cooking cost\nfor Class - V to VIII", "Food Grains for\nClass - V (Kg.)",
+        "Food grains for\nClass VI to VIII (Kg.)"
     ]
     for col_num, header in enumerate(headers, 1):
         cell = ws.cell(row=12, column=col_num, value=header)
@@ -278,7 +249,6 @@ def create_excel_template(c_v, c_vi):
         ws.cell(row=39, column=col).font = f_data_bold
         ws.cell(row=39, column=col).alignment = a_center_wrap
 
-    # ---- Dynamic Row 40 Formula Note ----
     formula_note = f"*(Total student of Class - V X {c_v}) + Total student of Class - VI to VIII X {c_vi})"
     c = ws.cell(row=40, column=1, value=formula_note)
     c.font = f_hdr8; c.alignment = a_left_wrap
@@ -318,7 +288,6 @@ def create_excel_template(c_v, c_vi):
 st.markdown("---")
 if st.button("Download Final Excel Report", type="primary"):
     try:
-        # Pass the configured cost rates into the template generator
         wb, sheet = create_excel_template(cost_rate_v, cost_rate_vi)
         start_row = 13
 
@@ -347,13 +316,13 @@ if st.button("Download Final Excel Report", type="primary"):
                 sheet.cell(row=39, column=3).value = row.get("No of student availing MDM Class - V", "")
                 sheet.cell(row=39, column=4).value = row.get("No of student availing MDM Class - VI to VIII", "")
                 sheet.cell(row=39, column=6).value = row.get("Cooking cost for Class - V to VIII", "")
-                sheet.cell(row=39, column=7).value = row.get("Food Grains for Class - V", "")
-                sheet.cell(row=39, column=8).value = row.get("Food grains for Class - VI to VIII", "")
+                sheet.cell(row=39, column=7).value = row.get("Food Grains for Class - V (Kg.)", "")
+                sheet.cell(row=39, column=8).value = row.get("Food grains for Class - VI to VIII (Kg.)", "")
                 
                 try:
                     total_cooking_exp = float(row.get("Cooking cost for Class - V to VIII", 0))
-                    g_v = float(row.get("Food Grains for Class - V", 0))
-                    g_vi = float(row.get("Food grains for Class - VI to VIII", 0))
+                    g_v = float(row.get("Food Grains for Class - V (Kg.)", 0))
+                    g_vi = float(row.get("Food grains for Class - VI to VIII (Kg.)", 0))
                     total_grains_exp = g_v + g_vi
                 except ValueError:
                     pass
@@ -368,13 +337,15 @@ if st.button("Download Final Excel Report", type="primary"):
                 sheet.cell(row=current_row, column=3).value = row["No of student availing MDM Class - V"]
                 sheet.cell(row=current_row, column=4).value = row["No of student availing MDM Class - VI to VIII"]
 
-                final_food_string = to_excel_format(row["Items served"])
+                # Automatically convert English text phonetically to Bengali for Excel output
+                raw_item = row["Items served"]
+                final_food_string = phonetic_convert(raw_item)
                 if final_food_string:
                     sheet.cell(row=current_row, column=5).value = final_food_string
 
                 sheet.cell(row=current_row, column=6).value = row["Cooking cost for Class - V to VIII"]
-                sheet.cell(row=current_row, column=7).value = row["Food Grains for Class - V"]
-                sheet.cell(row=current_row, column=8).value = row["Food grains for Class - VI to VIII"]
+                sheet.cell(row=current_row, column=7).value = row["Food Grains for Class - V (Kg.)"]
+                sheet.cell(row=current_row, column=8).value = row["Food grains for Class - VI to VIII (Kg.)"]
 
         sheet.cell(row=43, column=8).value = total_cooking_exp
         sheet.cell(row=44, column=8).value = total_grains_exp
@@ -388,7 +359,7 @@ if st.button("Download Final Excel Report", type="primary"):
         wb.save(output)
         output.seek(0)
 
-        st.success("A4 Report generated successfully! Row 40 formula note has been updated with your rates.")
+        st.success("A4 Report generated successfully with phonetic Bengali conversion!")
 
         st.download_button(
             label="⬇️ Download Populated MDM Report",
